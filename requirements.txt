@@ -1,0 +1,14 @@
+datasets @ git+https://github.com/huggingface/datasets@a0b6402e8f32a806b1ef0ff4b99fd58e54232d49
+huggingface-hub==0.5.1
+jsonlines==3.1.0
+matplotlib==3.5.1
+numpy==1.22.1
+pandas==1.4.0
+Pillow==9.0.0
+scikit-learn==1.0.2
+scipy==1.7.3
+tensorboard==2.10.0
+tokenizers==0.12.1
+torch==1.10.1+cu113
+transformers==4.18.0
+wandb==0.12.14

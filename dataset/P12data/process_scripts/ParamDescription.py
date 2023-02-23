@@ -1,0 +1,116 @@
+import json
+
+param_detailed_description = {
+    "ALP": "Alkaline phosphatase (IU/L)",
+    "ALT": "Alanine transaminase (IU/L)",
+    "AST": "Aspartate transaminase (IU/L)",
+    "Albumin": "Albumin (g/dL)",
+    "BUN": "Blood urea nitrogen (mg/dL)",
+    "Bilirubin": "Bilirubin (mg/dL)",
+    "Cholesterol": "Cholesterol (mg/dL)",
+    "Creatinine": "Serum creatinine (mg/dL)",
+    "DiasABP": "Invasive diastolic arterial blood pressure (mmHg)",
+    "FiO2": "Fractional inspired O2 (0-1)",
+    "GCS": "Glasgow Coma Score (3-15)",
+    "Glucose" :"Serum glucose (mg/dL)",
+    "HCO3": "Serum bicarbonate (mmol/L)",
+    "HCT": "Hematocrit (%)",
+    "HR": "Heart rate (bpm)",
+    "K": "Serum potassium (mEq/L)",
+    "Lactate": "Lactate (mmol/L)",
+    "MAP": "Invasive mean arterial blood pressure (mmHg)",
+    "MechVent": "Mechanical ventilation respiration (0:false, or 1:true)",
+    "Mg": "Serum magnesium (mmol/L)",
+    "NIDiasABP": "Non-invasive diastolic arterial blood pressure (mmHg)",
+    "NIMAP": "Non-invasive mean arterial blood pressure (mmHg)",
+    "NISysABP": "Non-invasive systolic arterial blood pressure (mmHg)",
+    "Na": "Serum sodium (mEq/L)", 
+    "PaCO2": "partial pressure of arterial CO2 (mmHg)",
+    "PaO2": "Partial pressure of arterial O2 (mmHg)",
+    "Platelets": "Platelets(cells/nL)",
+    "RespRate": "Respiration rate (bpm)",
+    "SaO2": "O2 saturation in hemoglobin (%)",
+    "SysABP": "Invasive systolic arterial blood pressure (mmHg)",
+    "Temp": "Temperature (°C)",
+    "TroponinI": "Troponin-I (μg/L)",
+    "TroponinT": "Troponin-T (μg/L)",
+    # "TropI": "Troponin-I (μg/L)",
+    # "TropT": "Troponin-T (μg/L)",
+    # "TroponinI": "Troponin-I (μg/L)",
+    "Urine": "Urine output (mL)",
+    "WBC": "White blood cell count (cells/nL)",
+    "pH": "Arterial pH (0-14)",
+    }
+
+with open('../processed_data/ts_params_desc.json', 'w') as f:
+    json.dump(param_detailed_description, f)
+
+
+marker_detailed_description = {
+    ">": "triangle_right",
+    "1": "tri_down",
+    "2": "tri_up",
+    "3": "tri_left",
+    "4": "tri_right",
+    "8": "octagon",
+    "s": "square",
+    "p": "pentagon",
+    "P": "plus",
+    "*": "star",
+    "h": "hexagon1",
+    "H": "hexagon2",
+    "+": "plus",
+    "x": "x",
+    "X": "x",
+    "D": "diamond",
+    "d": "thin_diamond",
+    "|": "vline",
+    "_": "hline"
+}
+
+with open('../processed_data/plt_markers_desc.json', 'w') as f:
+    json.dump(marker_detailed_description, f)
+
+color_detailed_description = {
+    "green": "1", 
+    "black": "2",
+    "blue": "3",
+    "brown": "4",
+    "chartreuse": "5",
+    "chocolate": "6",
+    "coral": "7",
+    "crimson": "8",
+    "blueviolet": "9",
+    "darkblue": "10",
+    "darkgreen": "11",
+    "firebrick": "12",
+    "gold": "13",
+    "teal": "14",
+    "grey": "15",
+    "indigo": "16",
+    "steelblue": "17",
+    "indianred": "18",
+    "goldenrod": "19",
+    "darkred": "20",
+    "darkorange": "21",
+    "magenta": "22",
+    "maroon": "23",
+    "navy": "24",
+    "olive": "25",
+    "orange": "26",
+    "orchid": "27",
+    "pink": "28",
+    "plum": "29",
+    "purple": "30",
+    "red": "31",
+    "cornflowerblue": "32",
+    "sienna": "33",
+    "darkkhaki": "34",
+    "tan": "35",
+    "dodgerblue": "36",
+    "darkseagreen": "37",
+    "cadetblue": "38"
+}
+
+with open('../processed_data/plt_colors_desc.json', 'w') as f:
+    json.dump(color_detailed_description, f)
