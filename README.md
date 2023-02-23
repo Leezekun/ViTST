@@ -1,6 +1,6 @@
 # ViTST
 
-This is an official implementation of ICML 2023 Submission: "Time Series as Images: Vision Transformer for Irregularly Sampled Time Series." 
+This is an official implementation of the paper: "Time Series as Images: Vision Transformer for Irregularly Sampled Time Series." 
 
 ## Overview
 We consider the irregularly sampled multivariate time series modeling from a whole new perspective: transforming irregularly sampled time series into line graph images and adapting powerful vision transformers to perform time series classification in the same way as image classification.
