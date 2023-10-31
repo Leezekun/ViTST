@@ -1,18 +1,20 @@
-import os
 import sys
+sys.path.insert(0, '/mnt/raid0/zekun/ViTST/code')
+import os
+
 import argparse
 from random import seed
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from typing import Dict, List, Optional, Set, Tuple, Union
+import time
 
 import torch
 from transformers import EarlyStoppingCallback, IntervalStrategy
 from transformers import AutoConfig, AutoFeatureExtractor, AutoModelForImageClassification, TrainingArguments, Trainer
 from sklearn.metrics import *
 from torchvision.transforms import (
-    CenterCrop,
     Compose,
     Normalize,
     ToTensor,
@@ -33,66 +35,18 @@ def one_hot(y_):
     n_values = np.max(y_) + 1
     return np.eye(n_values)[np.array(y_, dtype=np.int32)]
 
-class Cutout(object):
-    """Randomly mask out one or more patches from an image.
-    Args:
-        n_holes (int): Number of patches to cut out of each image.
-        length (int): The length (in pixels) of each square patch.
-    """
-    def __init__(self, n_holes, length, fixed_vertical=False):
-        self.n_holes = n_holes
-        self.length = length
-        self.fixed_vertical = fixed_vertical
-    
-    def __call__(self, img):
-        """
-        Args:
-            img (Tensor): Tensor image of size (C, H, W).
-        Returns:
-            Tensor: Image with n_holes of dimension length x length cut out of it.
-        """
-        h = img.size(1)
-        w = img.size(2)
-
-        mask = np.ones((h, w), np.float32)
-
-        for n in range(self.n_holes):
-            if self.fixed_vertical:
-                x = np.random.randint(w)
-
-                y1 = 0
-                y2 = h - 1
-                x1 = np.clip(x - self.length // 2, 0, w)
-                x2 = np.clip(x + self.length // 2, 0, w)
-            else:
-                y = np.random.randint(h)
-                x = np.random.randint(w)
-
-                y1 = np.clip(y - self.length // 2, 0, h)
-                y2 = np.clip(y + self.length // 2, 0, h)
-                x1 = np.clip(x - self.length // 2, 0, w)
-                x2 = np.clip(x + self.length // 2, 0, w)
-
-            mask[y1: y2, x1: x2] = 0.
-
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img = img * mask
-
-        return img
 
 def fine_tune_hf(
     model_path,
     model_loader,
     output_dir,
+    dataset,
     train_dataset,
     val_dataset,
     test_dataset,
     image_size,
     grid_layout,
     window_size,
-    cutout_num,
-    cutout_size,
     num_classes,
     epochs,
     train_batch_size,
@@ -102,20 +56,21 @@ def fine_tune_hf(
     learning_rate,
     seed,
     save_total_limit,
+    load_best_model_at_end,
     do_train,
     continue_training,
     train_from_scratch
     ):  
-
+        
     # loading model and feature extractor
     if do_train and not continue_training:
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
         if train_from_scratch:
             config = AutoConfig.from_pretrained(model_path, num_labels=num_classes, ignore_mismatched_sizes=True)
             # update config
             config.image_size = image_size
             config.grid_layout = grid_layout
-            config.window_size = window_size if window_size else config.window_size
+            if window_size and "window_size" in config:
+                config.window_size = window_size 
             model = model_loader(config)
         else:
             if "vit" in model_path:
@@ -128,6 +83,7 @@ def fine_tune_hf(
                                                         grid_layout=grid_layout)
             else:
                 model = model_loader.from_pretrained(model_path, num_labels=num_classes, ignore_mismatched_sizes=True)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_path)
     else:
         # if not train, load the fine-tuned model saved in output_dir
         if os.path.exists(output_dir):
@@ -216,14 +172,16 @@ def fine_tune_hf(
     train_transforms = Compose(
             [   
                 # Resize(feature_extractor.size),
+                # RandomResizedCrop(feature_extractor.size),
+                # CenterCrop(feature_extractor.size),
                 ToTensor(),
-                Cutout(n_holes=cutout_num, length=cutout_size),
                 # normalize,
             ]
         )
     val_transforms = Compose(
             [
                 # Resize(feature_extractor.size),
+                # CenterCrop(feature_extractor.size),
                 ToTensor(),
                 # normalize,
             ]
@@ -256,7 +214,10 @@ def fine_tune_hf(
         best_metric = "rmse"
     elif num_classes == 2:
         compute_metrics = compute_metrics_binary
-        best_metric = "auprc"
+        if dataset in ['P19', 'P12']:
+            best_metric = "auroc"
+        else:
+            best_metric = 'accuracy'
     elif num_classes > 2:
         compute_metrics = compute_metrics_multilabel
         best_metric = "accuracy"
@@ -279,7 +240,7 @@ def fine_tune_hf(
     logging_dir=os.path.join(output_dir, "runs/"),
     save_total_limit=save_total_limit,
     seed=seed,
-    load_best_model_at_end=True,
+    load_best_model_at_end=load_best_model_at_end,
     remove_unused_columns=False,
     metric_for_best_model=best_metric
     )
@@ -289,23 +250,41 @@ def fine_tune_hf(
     training_args,
     train_dataset=train_dataset,
     eval_dataset=val_dataset,
-    # eval_dataset=test_dataset,
     tokenizer=feature_extractor,
     compute_metrics=compute_metrics,
     data_collator=collate_fn,
-    callbacks = [EarlyStoppingCallback(early_stopping_patience=5)]
+    callbacks=[EarlyStoppingCallback(early_stopping_patience=5)] if load_best_model_at_end else None
     )
 
     # training the model with Huggingface 🤗 trainer
     if do_train:
+        start = time.time()
         train_results = trainer.train()
+        end = time.time()
+        time_elapsed = end - start
+        print('Total Time elapsed: %.3f mins' % (time_elapsed / 60.0))
+        
         # trainer.save_model()
         # trainer.log_metrics("train", train_results.metrics)
         # trainer.save_metrics("train", train_results.metrics)
         # trainer.save_state()
+    
+    # evaluation results
+    # metrics = trainer.evaluate()
+    # acc = metrics["eval_accuracy"]
+    # precision = metrics["eval_precision"]
+    # recall = metrics["eval_recall"]
+    # F1 = metrics["eval_f1"]
+    # auroc = metrics["eval_auroc"]
+    # auprc = metrics["eval_auprc"]
 
     # testing results
+    start = time.time()
     predictions = trainer.predict(test_dataset)
+    end = time.time()
+    time_elapsed = end - start
+    print('Total Time elapsed: %.3f secs' % (time_elapsed))
+    
     logits, labels = predictions.predictions, predictions.label_ids
     ypred = np.argmax(logits, axis=1)
     denoms = np.sum(np.exp(logits), axis=1).reshape((-1, 1))
@@ -347,7 +326,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_prefix', type=str, default='') #
     
     parser.add_argument('--withmissingratio', default=False, help='if True, missing ratio ranges from 0 to 0.5; if False, missing ratio =0') #
-    parser.add_argument('--feature_removal_level', type=str, default='no_removal', choices=['no_removal', 'set', 'sample'],
+    parser.add_argument('--feature_removal_level', type=str, default='no_removal', choices=['no_removal', 'set', 'random'],
                         help='use this only when splittype==random; otherwise, set as no_removal') #
     parser.add_argument('--predictive_label', type=str, default='mortality', choices=['mortality', 'LoS'],
                         help='use this only with P12 dataset (mortality or length of stay)')
@@ -368,11 +347,8 @@ if __name__ == "__main__":
     parser.add_argument('--n_runs', type=int, default=1)
     parser.add_argument('--n_splits', type=int, default=5)
     parser.add_argument('--upsample', default=False)
-    
+
     # argument for the images
-    parser.add_argument('--cutout_ratio', type=float, default=0.)    
-    parser.add_argument('--cutout_num', type=int, default=0)
-    parser.add_argument('--cutout_size', type=int, default=0)
     parser.add_argument('--grid_layout', default=None)
     parser.add_argument('--image_size', default=None)
     parser.add_argument('--patch_size', default=None)
@@ -399,21 +375,17 @@ if __name__ == "__main__":
     image_size = args.image_size
     grid_layout = args.grid_layout
     window_size = args.window_size
-    cutout_ratio = args.cutout_ratio
-    cutout_num = args.cutout_num
-    cutout_size = args.cutout_size
     mask_patch_size = args.mask_patch_size
     mask_ratio = args.mask_ratio
     mask_method = args.mask_method
     patch_size = args.patch_size
-
     if dataset == 'P12':
         base_path = '../../dataset/P12data'
         num_classes = 2
-        image_size = 384
-        grid_layout = 6
         upsample = True
         epochs = 4
+        image_size = 384
+        grid_layout = 6
     elif dataset == 'P19':
         base_path = '../../dataset/P19data'
         num_classes = 2
@@ -424,8 +396,8 @@ if __name__ == "__main__":
     elif dataset == 'PAM':
         base_path = '../../dataset/PAMdata'
         num_classes = 8
-        image_size = (256,320)
-        grid_layout = (4,5)
+        grid_layout = (4, 5)
+        image_size = (256, 320)
         epochs = 20
     elif dataset == 'EthanolConcentration':
         base_path = '../../dataset/TSRAdata/Classification/EthanolConcentration'
@@ -452,6 +424,11 @@ if __name__ == "__main__":
         num_classes = 2
         image_size = 384
         grid_layout = 3
+    elif dataset == 'Handwriting':
+        base_path = '../../dataset/TSRAdata/Classification/Handwriting'
+        num_classes = 26
+        image_size = 256
+        grid_layout = 2
     elif dataset == 'JapaneseVowels':
         base_path = '../../dataset/TSRAdata/Classification/JapaneseVowels'
         num_classes = 9
@@ -462,7 +439,32 @@ if __name__ == "__main__":
         num_classes = 8
         image_size = 256
         grid_layout = 2
-    
+    elif dataset == 'FaceDetection':
+        base_path = '../../dataset/TSRAdata/Classification/FaceDetection'
+        num_classes = 2
+        grid_layout = 12
+        image_size = 384
+    elif dataset == 'PEMS-SF':
+        base_path = '../../dataset/TSRAdata/Classification/PEMS-SF'
+        num_classes = 7
+        grid_layout = 32
+        image_size = 384
+    elif dataset == 'EigenWorms':
+        base_path = '../../dataset/TSRAdata/Classification/EigenWorms'
+        num_classes = 5
+        grid_layout = (2,3)
+        image_size = (256, 384)
+    elif dataset == 'AppliancesEnergy':
+        base_path = '../../dataset/TSRAdata/Regression/AppliancesEnergy'
+        num_classes = 1
+        grid_layout = (5,5)
+        image_size = (224, 224)
+    elif dataset == 'IEEEPPG':
+        base_path = '../../dataset/TSRAdata/Regression/IEEEPPG'
+        num_classes = 1
+        grid_layout = (3,3)
+        image_size = (224, 224)
+
     """prepare the model for sequence classification"""
     model = args.model
     model_loader = AutoModelForImageClassification
@@ -470,10 +472,14 @@ if __name__ == "__main__":
         model_path = "google/vit-base-patch16-224-in21k"
         model_loader = ViTForImageClassification
         patch_size = 16
-    elif model == "swin" : # default swin
+        pretrained_data = "ImageNet-21k"
+        pretrained_size = 224
+    elif model == "swin": # default swin
         model_path = "microsoft/swin-base-patch4-window7-224-in22k"
         model_loader = SwinForImageClassification
         patch_size = 4
+        pretrained_data = "ImageNet-21k"
+        pretrained_size = 224
     elif model == "resnet":
         model_path = "microsoft/resnet-50"
         pretrained_data = "ImageNet-1k"
@@ -506,7 +512,7 @@ if __name__ == "__main__":
         mape_arr = np.zeros((n_splits, n_runs))
         mae_arr = np.zeros((n_splits, n_runs))
 
-        for k in range(n_splits):
+        for k in range(5):
 
             split_idx = k + 1
             print('Split id: %d' % split_idx)
@@ -525,6 +531,8 @@ if __name__ == "__main__":
             # find the pretrained mim/mae image model 
             if args.finetune_mim:
                 pretrained_image_model_dir = f"../../ckpt/ImgMIM/{dataset_prefix}{dataset}_{model}_{mask_patch_size}_{mask_ratio}_{mask_method}/split{split_idx}"
+            elif args.finetune_mae:
+                pretrained_image_model_dir = f"../../ckpt/ImgMAE/{dataset_prefix}{dataset}_{model}_{mask_ratio}_{mask_method}/split{split_idx}"
             else:
                 pretrained_image_model_dir = None
 
@@ -549,29 +557,32 @@ if __name__ == "__main__":
             # the path to save models
             if args.output_dir is None:
                 if args.train_from_scratch:
-                    if cutout_num > 0 and cutout_size > 0:
-                        output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_cutout_{cutout_num}_{cutout_size}_from_scratch/split{split_idx}"
-                    else:
-                        output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_from_scratch/split{split_idx}"
+                    output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_from_scratch/split{split_idx}"
                 else:
                     if args.finetune_mim:
                         output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_mim_{mask_patch_size}_{mask_ratio}_{mask_method}/split{split_idx}"
-                    elif cutout_num > 0 and cutout_size > 0:
-                        output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_cutout_{cutout_num}_{cutout_size}/split{split_idx}"
+                    elif args.finetune_mae:
+                        output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}_mae_{mask_ratio}_{mask_method}/split{split_idx}"
                     else:
                         output_dir = f"../../ckpt/ImgCLS/{dataset_prefix}{dataset}_{model}/split{split_idx}"
             else:
                 output_dir = args.output_dir
 
             # prepare the data:
-            Ptrain, Pval, Ptest, ytrain, yval, ytest = get_data_split(base_path, split_path, dataset=dataset, prefix=dataset_prefix, upsample=upsample, missing_ratio=missing_ratio)
+            Ptrain, Pval, Ptest, ytrain, yval, ytest = get_data_split(base_path, split_path, split_idx, dataset=dataset, prefix=dataset_prefix, 
+                                                                      upsample=upsample, 
+                                                                      missing_ratio=missing_ratio,
+                                                                      feature_removal_level=feature_removal_level)
             print(len(Ptrain), len(Pval), len(Ptest), len(ytrain), len(yval), len(ytest))
             
             # if pval is none: use test dataset instead
             if len(Pval) == 0:
                 Pval = Ptest
                 yval = ytest
+                load_best_model_at_end = False
                 print("Don't have val dataset, use test dataset as eval dataset instead")
+            else:
+                load_best_model_at_end = True
 
             for m in range(n_runs):
                 print('- - Run %d - -' % (m + 1))
@@ -579,14 +590,13 @@ if __name__ == "__main__":
                 model_path=model_path,
                 model_loader=model_loader,
                 output_dir=output_dir,
+                dataset=dataset,
                 train_dataset=Ptrain,
                 val_dataset=Pval,
                 test_dataset=Ptest,
                 image_size=image_size,
                 grid_layout=grid_layout,
                 window_size=window_size,
-                cutout_num=cutout_num,
-                cutout_size=cutout_size,
                 num_classes=num_classes,
                 epochs=epochs,
                 train_batch_size=args.train_batch_size,
@@ -596,6 +606,7 @@ if __name__ == "__main__":
                 learning_rate=args.learning_rate,
                 seed=args.seed,
                 save_total_limit=args.save_total_limit,
+                load_best_model_at_end=load_best_model_at_end,
                 do_train=args.do_train,
                 continue_training=args.continue_training,
                 train_from_scratch=args.train_from_scratch
@@ -665,4 +676,7 @@ if __name__ == "__main__":
 
         with open(os.path.join(output_dir.split("split")[0], "test_result.txt"), "w+") as f:
             f.write(test_report)
+
+        if len(missing_ratios) > 1:
+            _ = input(f"Current missing ratio: {missing_ratio}. \nPress ENTER to check out the next missing value:")
 

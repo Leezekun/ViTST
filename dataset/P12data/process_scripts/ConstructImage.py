@@ -5,26 +5,120 @@ import random
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
-from transformers import AutoTokenizer
 
+"""
+Dataset configurations 
+"""
 max_tmins = 48*60 # 48 hours
 
+param_detailed_description = {
+    "ALP": "Alkaline phosphatase (IU/L)",
+    "ALT": "Alanine transaminase (IU/L)",
+    "AST": "Aspartate transaminase (IU/L)",
+    "Albumin": "Albumin (g/dL)",
+    "BUN": "Blood urea nitrogen (mg/dL)",
+    "Bilirubin": "Bilirubin (mg/dL)",
+    "Cholesterol": "Cholesterol (mg/dL)",
+    "Creatinine": "Serum creatinine (mg/dL)",
+    "DiasABP": "Invasive diastolic arterial blood pressure (mmHg)",
+    "FiO2": "Fractional inspired O2 (0-1)",
+    "GCS": "Glasgow Coma Score (3-15)",
+    "Glucose" :"Serum glucose (mg/dL)",
+    "HCO3": "Serum bicarbonate (mmol/L)",
+    "HCT": "Hematocrit (%)",
+    "HR": "Heart rate (bpm)",
+    "K": "Serum potassium (mEq/L)",
+    "Lactate": "Lactate (mmol/L)",
+    "MAP": "Invasive mean arterial blood pressure (mmHg)",
+    "MechVent": "Mechanical ventilation respiration (0:false, or 1:true)",
+    "Mg": "Serum magnesium (mmol/L)",
+    "NIDiasABP": "Non-invasive diastolic arterial blood pressure (mmHg)",
+    "NIMAP": "Non-invasive mean arterial blood pressure (mmHg)",
+    "NISysABP": "Non-invasive systolic arterial blood pressure (mmHg)",
+    "Na": "Serum sodium (mEq/L)", 
+    "PaCO2": "partial pressure of arterial CO2 (mmHg)",
+    "PaO2": "Partial pressure of arterial O2 (mmHg)",
+    "Platelets": "Platelets(cells/nL)",
+    "RespRate": "Respiration rate (bpm)",
+    "SaO2": "O2 saturation in hemoglobin (%)",
+    "SysABP": "Invasive systolic arterial blood pressure (mmHg)",
+    "Temp": "Temperature (°C)",
+    "TroponinI": "Troponin-I (μg/L)",
+    "TroponinT": "Troponin-T (μg/L)",
+    # "TropI": "Troponin-I (μg/L)",
+    # "TropT": "Troponin-T (μg/L)",
+    # "TroponinI": "Troponin-I (μg/L)",
+    "Urine": "Urine output (mL)",
+    "WBC": "White blood cell count (cells/nL)",
+    "pH": "Arterial pH (0-14)",
+    }
+
+color_detailed_description = {
+    "aqua": "1",
+    "azure": "2",
+    "beige": "3",
+    "black": "4",
+    "blue": "5",
+    "brown": "6",
+    "chartreuse": "7",
+    "chocolate": "8",
+    "coral": "9",
+    "crimson": "10",
+    "cyan": "11",
+    "darkblue": "12",
+    "darkgreen": "13",
+    "fuchsia": "14",
+    "gold": "15",
+    "green": "16",
+    "grey": "17",
+    "indigo": "18",
+    "ivory": "19",
+    "khaki": "20",
+    "lavender": "21",
+    "lightblue": "22",
+    "lightgreen": "23",
+    "magenta": "24",
+    "maroon": "25",
+    "navy": "26",
+    "olive": "27",
+    "orange": "28",
+    "orchid": "29",
+    "pink": "30",
+    "plum": "31",
+    "purple": "32",
+    "red": "33",
+    "salmon": "34",
+    "sienna": "35",
+    "silver": "36",
+    "tan": "37",
+    "teal": "38",
+    "yellow": "39",
+    "yellowgreen": "40"
+}
+
+"""
+Code
+"""
 def construct_demogr_description(static_demogr):
     desc = []
     # age
     if static_demogr[0]:
         desc.append(f"{int(static_demogr[0])} years old")
+    
     # gender
     if int(static_demogr[1]) == 0:
         desc.append("female")
     elif int(static_demogr[1]) == 1:
         desc.append("male") 
+
     # height
     if static_demogr[2] > 0:
         desc.append(f"{static_demogr[0]} cm")
+
     # weight
     if static_demogr[4] > 0:
         desc.append(f"{static_demogr[4]} kg")
+    
     # icu type
     if static_demogr[3] > 0:
         if int(static_demogr[3]) == 1:
@@ -47,13 +141,11 @@ def construct_demogr_description(static_demogr):
 
     return desc
 
-def standardize(x, mean, std):
-    return (x-mean)/(std+1e-18)
-
-def draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, override, differ, outlier, interpolation, order,
+def draw_image(pid, split_idx, ts_orders, ts_values, ts_times, ts_params, ts_scales, 
+               override, differ, outlier, interpolation, order,
                 image_size, grid_layout,
-                linestyle, linewidth, markersize,
-                ts_marker_mapping, ts_color_mapping, ts_idx_mapping):
+                linestyle, linewidth, marker, markersize,
+                ts_color_mapping, ts_idx_mapping):
         
     # set matplotlib param
     grid_height = grid_layout[0]
@@ -73,7 +165,8 @@ def draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, overri
     plt.rcParams['figure.frameon'] = False
 
     # save path
-    base_path = f"{grid_height}*{grid_width}_images"
+    base_path = f"{linestyle}*{linewidth}_{marker}*{markersize}_{grid_height}*{grid_width}_{img_height}*{img_width}_split{split_idx}_images"
+
     if interpolation:
         base_path = "interpolation_" + base_path
     if differ:
@@ -92,7 +185,7 @@ def draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, overri
 
     drawed_params = []
 
-    # find the information across all the pations
+    # find the information across all the patients
     max_hours, num_params = ts_values.shape[0], ts_values.shape[1]
     for idx, param_idx in enumerate(ts_orders): # ts_desc: (215, 36)
         
@@ -109,26 +202,32 @@ def draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, overri
         ts_time = np.array(ts_times).reshape(-1,1)
         ts_value = np.array(ts_value).reshape(-1,1)
         # handling missing value and extreme values
-        kept_index = (ts_value != 0) & (ts_value < param_scale_y[1]) & (ts_value > param_scale_y[0])
-        removed_index = (ts_value == 0) | (ts_value > param_scale_y[1]) | (ts_value < param_scale_y[0])
+        kept_index = (ts_value != 0)
+        removed_index = (ts_value == 0)
         if interpolation:
             ts_time = ts_time[kept_index]
             ts_value = ts_value[kept_index]
         else:
             ts_time[removed_index] = np.nan
             ts_value[removed_index] = np.nan
-        
+        # handling extreme values
+        min_index = (ts_value < param_scale_y[0])
+        ts_value[min_index] = param_scale_y[0]
+        # handling extreme values
+        max_index = (ts_value > param_scale_y[1])
+        ts_value[max_index] = param_scale_y[1]
+
         ##### draw the plot for each parameter
-        param_marker = ts_marker_mapping[param]
+        # param_marker = ts_marker_mapping[param]
         param_color = ts_color_mapping[param]
         param_idx = ts_idx_mapping[param]
 
         # plt.subplot(grid_height, grid_width, param_idx+1) # 6*6
         plt.subplot(grid_height, grid_width, idx+1) # 6*6
         if differ: # using different colors and markers
-            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, markersize=markersize, color=param_color, marker="*")
+            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, marker=marker, markersize=markersize, color=param_color)
         else:
-            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth)
+            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, marker=marker, markersize=markersize,)
 
         # set the scale for x, y axis
         plt.xlim(param_scale_x)
@@ -147,7 +246,7 @@ def draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, overri
 
 
 def construct_image(
-    linestyle="-", linewidth=1, markersize=2, 
+    linestyle="-", linewidth=1, marker="*", markersize=2, 
     override=False, 
     differ=False, 
     outlier=None,
@@ -164,187 +263,206 @@ def construct_image(
     
     num_samples = len(Pdict_list)
     print(f"{num_samples} patients in total!") 
-    print(Pdict_list[0].keys()) # ['id', 'static', 'extended_static', 'arr', 'time', 'length']
+    print(list(Pdict_list[0].keys())) # ['id', 'static', 'extended_static', 'arr', 'time', 'length']
 
     num_ts_params = len(ts_params) # 36
     print(f"{num_ts_params} parameters!")
 
-    # load markers and colors
-    f = open('../processed_data/plt_markers_desc.json', 'r')
-    plt_markers_description = json.load(f)
-    f = open('../processed_data/plt_colors_desc.json', 'r')
-    plt_colors_description = json.load(f)
-
-    plt_markers = list(plt_markers_description.keys())
-    num_markers = len(plt_markers)
-    print(f"{num_markers} markers!")
-
-    plt_colors = list(plt_colors_description.keys())
+    plt_colors = list(color_detailed_description.keys())
     num_colors = len(plt_colors)
     print(f"{num_colors} colors!")
+    
+    """
+    for random param color exp
+    """
+    if num_ts_params > num_colors:
+        plt_colors = []
+        rs = list(np.linspace(0.0, 1.0, num_ts_params))
+        random.shuffle(rs) # from 0 to 1
+        gs = list(np.linspace(0.0, 1.0, num_ts_params))
+        random.shuffle(gs) # from 0 to 1
+        bs = list(np.linspace(0.0, 1.0, num_ts_params))
+        random.shuffle(bs) # from 0 to 1
+        for idx in range(num_ts_params):
+            color = (rs[idx], gs[idx], bs[idx])
+            plt_colors.append(color)
 
     # construct the mapping from param to marker, color, and idx
-    ts_marker_mapping = {}
     ts_idx_mapping = {}
     ts_color_mapping = {}
     for idx, param in enumerate(ts_params):
-        if idx < num_markers:
-            ts_marker_mapping[param] = plt_markers[idx]
-        else: # if not enough markers, use (num_sides, 0/1/2, angles) markers
-            marker = (int((idx-num_markers)/3)+3, int((idx-num_markers)%3)) # starting from (3,0)
-            ts_marker_mapping[param] = marker
         ts_color_mapping[param] = plt_colors[idx]
         ts_idx_mapping[param] = idx
 
-    with open('../processed_data/param_marker_mapping.json', 'w') as f:
-        json.dump(ts_marker_mapping, f)
     with open('../processed_data/param_idx_mapping.json', 'w') as f:
         json.dump(ts_idx_mapping, f)
     with open('../processed_data/param_color_mapping.json', 'w') as f:
         json.dump(ts_color_mapping, f)
     
-    # start constructing the data list
-    ImageDict_list = []
-    demogr_lengths = []
-    tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
+    for split_idx in range(5):
+        # start constructing the data list
+        ImageDict_list = []
+        demogr_lengths = []
 
-    # first round, find the mean and std for each param across all the data
-    all_ts_values = [[] for _ in range(num_ts_params)]
-    stat_ts_values = np.ones(shape=(num_ts_params, 10)) # mean, std, y_min, y_max
-    for idx, p in tqdm(enumerate(Pdict_list)):
-        ts_values = p['arr'] #(60, 34)
+        base_path = '../'
+        split_path = '/splits/phy12_split' + str(split_idx+1) + '.npy'
+        idx_train, idx_val, idx_test = np.load(base_path + split_path, allow_pickle=True)
+        # extract train/val/test examples
+        Ptrain = Pdict_list[idx_train]
+        Pval = Pdict_list[idx_val]
+        Ptest = Pdict_list[idx_test]
+
+        # first round, find the mean and std for each param on training set
+        train_ts_values = [[] for _ in range(num_ts_params)]
+        all_ts_values = [[] for _ in range(num_ts_params)]
+        stat_ts_values = np.ones(shape=(num_ts_params, 12)) # mean, std, y_min, y_max
+        for idx, p in tqdm(enumerate(Ptrain)):
+            ts_values = p['arr'] #(60, 34)
+            for param_idx in range(num_ts_params): # ts_desc: (60, 34)
+                ts_value = ts_values[:, param_idx]
+                ts_value = np.array(ts_value).reshape(-1,1)
+                # handling missing value
+                ts_value = ts_value[ts_value != 0]  
+                train_ts_values[param_idx].extend(list(ts_value))
+
+        for idx, p in tqdm(enumerate(Pdict_list)):
+            ts_values = p['arr'] #(60, 34)
+            for param_idx in range(num_ts_params): # ts_desc: (60, 34)
+                ts_value = ts_values[:, param_idx]
+                ts_value = np.array(ts_value).reshape(-1,1)
+                # handling missing value
+                ts_value = ts_value[ts_value != 0]  
+                all_ts_values[param_idx].extend(list(ts_value))
+        
+        # sort the params based on missing ratios
+        if order:
+            ts_value_nums = [len(_) for _ in train_ts_values]
+            ts_orders = np.argsort(ts_value_nums)[::-1]
+        else:
+            ts_orders = list(range(num_ts_params))
+
+        # change from list to array
+        for param_idx in range(num_ts_params):
+            train_ts_values[param_idx] = np.array(train_ts_values[param_idx])
+
         for param_idx in range(num_ts_params): # ts_desc: (60, 34)
-            ts_value = ts_values[:, param_idx]
-            ts_value = np.array(ts_value).reshape(-1,1)
-            # handling missing value
-            ts_value = ts_value[ts_value != 0]  
-            all_ts_values[param_idx].extend(list(ts_value))
-    
-    # the order of params
-    if order:
-        ts_value_nums = [len(_) for _ in all_ts_values]
-        ts_orders = np.argsort(ts_value_nums)[::-1]
-    else:
-        ts_orders = list(range(num_ts_params))
+            param_ts_value = np.array(train_ts_values[param_idx])
 
-    # change from list to array
-    for param_idx in range(num_ts_params):
-        all_ts_values[param_idx] = np.array(all_ts_values[param_idx])
+            stat_ts_values[param_idx,0] = param_ts_value.mean()
+            stat_ts_values[param_idx,1] = param_ts_value.std()
+            stat_ts_values[param_idx,2] = param_ts_value.min()
+            stat_ts_values[param_idx,3] = param_ts_value.max()
 
-    for param_idx in range(num_ts_params): # ts_desc: (60, 34)
-        param_ts_value = np.array(all_ts_values[param_idx])
+            """
+            option 1. remove outliers with boxplot
+            """
+            q1 = np.percentile(param_ts_value, 25)
+            q3 = np.percentile(param_ts_value, 75)
+            med = np.median(param_ts_value)
+            iqr = q3-q1
+            upper_bound = q3+(1.5*iqr)
+            lower_bound = q1-(1.5*iqr)
+            stat_ts_values[param_idx,4] = lower_bound
+            stat_ts_values[param_idx,5] = upper_bound
+            param_ts_value1 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+            outlier_ratio = 1 - (len(param_ts_value1) / len(param_ts_value))
+            # print(f"{param_idx}, {outlier_ratio}")
+            
+            """
+            option 2. remove outliers with standard deviation
+            """
+            mean = np.mean(param_ts_value)
+            std = np.std(param_ts_value)
+            upper_bound = mean + (4*std)
+            lower_bound = mean - (4*std)
+            stat_ts_values[param_idx,6] = lower_bound
+            stat_ts_values[param_idx,7] = upper_bound
+            param_ts_value2 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+            outlier_ratio = 1 - (len(param_ts_value2) / len(param_ts_value))
 
-        stat_ts_values[param_idx,0] = param_ts_value.mean()
-        stat_ts_values[param_idx,1] = param_ts_value.std()
-        stat_ts_values[param_idx,2] = param_ts_value.min()
-        stat_ts_values[param_idx,3] = param_ts_value.max()
+            """
+            option 3. remove outliers with modified z-score
+            """
+            med = np.median(param_ts_value)
+            deviation_from_med = param_ts_value - med
+            mad = np.median(np.abs(deviation_from_med))
+            # modified_z_score = (deviation_from_med / mad)*0.6745
+            lower_bound = (-3.5/0.6745)*mad + med
+            upper_bound = (3.5/0.6745)*mad + med
+            stat_ts_values[param_idx,8] = lower_bound
+            stat_ts_values[param_idx,9] = upper_bound
+            param_ts_value3 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+            outlier_ratio = 1 - (len(param_ts_value3) / len(param_ts_value))
+            # print(f"{param_idx}, {outlier_ratio}")
 
-        """
-        1. remove outliers with boxplot
-        """
-        q1 = np.percentile(param_ts_value, 25)
-        q3 = np.percentile(param_ts_value, 75)
-        med = np.median(param_ts_value)
-        iqr = q3-q1
-        upper_bound = q3+(1.5*iqr)
-        lower_bound = q1-(1.5*iqr)
-        stat_ts_values[param_idx,4] = lower_bound
-        stat_ts_values[param_idx,5] = upper_bound
-        param_ts_value1 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
-        outlier_ratio = 1 - (len(param_ts_value1) / len(param_ts_value))
-        print(f"{param_idx}, {outlier_ratio}")
+            """
+            option 4. quartile
+            """
+            sorted_param_ts_value = np.sort(param_ts_value)
+            value_len = sorted_param_ts_value.shape[0]
+            max_position = min(value_len-1, round(value_len*0.99995))
+            min_position = max(0, round(value_len*0.00005))
+            upper_bound = sorted_param_ts_value[max_position]
+            lower_bound = sorted_param_ts_value[min_position]
+            stat_ts_values[param_idx,10] = lower_bound
+            stat_ts_values[param_idx,11] = upper_bound
+            
+        # second round, draw the image for each patient
+        for idx, p in tqdm(enumerate(Pdict_list)):
+
+            pid = int(p['id'])
+            ts_values = p['arr'] #(215, 36)
+            ts_times = p['time']
+
+            # textual label
+            arr_outcome = arr_outcomes[idx]
+            label = int(arr_outcome[-1])
+            label_name = "survivor" if label == 0 else "dead"
+
+            # static feature
+            static_demogr = p['static']
+            demogr_desc = construct_demogr_description(static_demogr)
+
+            # deal with outliers
+            if not outlier:
+                ts_scales = stat_ts_values[:,2:4] # no removal
+            elif outlier == "iqr":
+                ts_scales = stat_ts_values[:,4:6] # iqr
+            elif outlier == "std":
+                ts_scales = stat_ts_values[:,6:8] # std
+            elif outlier == "mzs":
+                ts_scales = stat_ts_values[:,8:10] # mzs
+            elif outlier == "qt":
+                ts_scales = stat_ts_values[:,10:12] # quartile
+
+            # draw the image for each p
+            drawed_params = draw_image(pid, split_idx, ts_orders, ts_values, ts_times, ts_params, ts_scales, override, differ, outlier, interpolation, order,
+                                        image_size, grid_layout, 
+                                        linestyle, linewidth, marker, markersize,
+                                        ts_color_mapping, ts_idx_mapping)
+            
+            ImageDict = {
+                "id": pid, 
+                "text": demogr_desc,
+                "label": label,
+                "label_name": label_name,
+                "arr_outcome": arr_outcome
+                }
+            ImageDict_list.append(ImageDict)
         
-        """
-        2. remove outliers with standard deviation
-        """
-        med = np.median(param_ts_value)
-        std = np.std(param_ts_value)
-        upper_bound = med + (3*std)
-        lower_bound = med - (3*std)
-        stat_ts_values[param_idx,6] = lower_bound
-        stat_ts_values[param_idx,7] = upper_bound
-        param_ts_value2 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
-        outlier_ratio = 1 - (len(param_ts_value2) / len(param_ts_value))
-        print(f"{param_idx}, {outlier_ratio}")
-
-        """
-        3. remove outliers with modified z-score
-        """
-        med = np.median(param_ts_value)
-        deviation_from_med = param_ts_value - med
-        mad = np.median(np.abs(deviation_from_med))
-        # modified_z_score = (deviation_from_med / mad)*0.6745
-        lower_bound = (-3.5/0.6745)*mad + med
-        upper_bound = (3.5/0.6745)*mad + med
-        stat_ts_values[param_idx,8] = lower_bound
-        stat_ts_values[param_idx,9] = upper_bound
-        param_ts_value3 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
-        outlier_ratio = 1 - (len(param_ts_value3) / len(param_ts_value))
-        print(f"{param_idx}, {outlier_ratio}")
-
-    # second round, draw the image for each patient
-    for idx, p in tqdm(enumerate(Pdict_list)):
-
-        pid = int(p['id'])
-        ts_values = p['arr'] #(215, 36)
-        ts_times = p['time']
-
-        # label
-        arr_outcome = arr_outcomes[idx]
-        label = int(arr_outcome[-1])
-        label_name = "survivor" if label == 0 else "dead"
-
-        # static feature
-        static_demogr = p['static']
-        demogr_desc = construct_demogr_description(static_demogr)
-        demogr_length = len(tokenizer(demogr_desc)[0])
-        demogr_lengths.append(demogr_length)
-
-        # normalize the values
-        if not outlier:
-            ts_scales = stat_ts_values[:,2:4] # no removal
-        elif outlier == "iqr":
-            ts_scales = stat_ts_values[:,4:6] # iqr
-        elif outlier == "sd":
-            ts_scales = stat_ts_values[:,6:8] # sd
-        elif outlier == "mzs":
-            ts_scales = stat_ts_values[:,8:10] # mzs
-
-        # draw the image for each p
-        drawed_params = draw_image(pid, ts_orders, ts_values, ts_times, ts_params, ts_scales, override, differ, outlier, interpolation, order,
-                                    image_size, grid_layout, 
-                                    linestyle, linewidth, markersize,
-                                    ts_marker_mapping, ts_color_mapping, ts_idx_mapping)
-        
-        ImageDict = {
-            "id": pid, 
-            "text": demogr_desc,
-            "label": label,
-            "label_name": label_name,
-            "arr_outcome": arr_outcome
-            }
-        ImageDict_list.append(ImageDict)
-    
-    # draw the histgram for token nums
-    plt.hist(demogr_length, bins=128)
-    # plt.axis('off')
-    plt.savefig("../processed_data/demogr_token_num_hist.png", bbox_inches='tight', pad_inches=0)
-    plt.clf()
-
     print(len(ImageDict_list))
-
     np.save(f'../processed_data/ImageDict_list.npy', ImageDict_list)
     print(f"Save data in ImageDict_list.npy")
 
 
 if __name__ == "__main__":
     construct_image(
-        linestyle="-", linewidth=1, markersize=2, 
+        linestyle="-", linewidth=1, marker="*", markersize=2, 
         override=False, 
         differ=True, 
         outlier=None,
         interpolation=True,
-        order=False,
+        order=True,
         grid_layout=(6,6),
         image_size=None
         )

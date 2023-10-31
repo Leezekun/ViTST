@@ -4,12 +4,12 @@ import pandas as pd
 import argparse
 import random
 from itertools import chain
-
+import os
 from datasets import load_dataset
 from datasets import load_metric
 from datasets import Dataset, Image
 
-def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio):
+def load_image(Pdict_list, y, base_path, split_idx, dataset_prefix, missing_ratio):
     images_path = []
     labels = []
     texts = []
@@ -22,7 +22,7 @@ def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio):
         texts.append(text)
 
         if missing_ratio == 0:
-            image_path = base_path + f'/processed_data/{dataset_prefix}images/{pid}.png'
+            image_path = base_path + f'/processed_data/{dataset_prefix}split{split_idx-1}_images/{pid}.png'
         elif missing_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
             image_path = base_path + f'/processed_data/{dataset_prefix}ms{missing_ratio}_images/{pid}.png'
         else:
@@ -34,7 +34,7 @@ def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio):
     
     return dataset, datadict
 
-def get_data_split(base_path, split_path, dataset='P12', prefix='', upsample=False, missing_ratio=0.):
+def get_data_split(base_path, split_path, split_idx, dataset='P12', prefix='', upsample=False, missing_ratio=0.):
     # load data
     if dataset == 'P12':
         Pdict_list = np.load(base_path + f'/processed_data/ImageDict_list.npy', allow_pickle=True)
@@ -95,9 +95,9 @@ def get_data_split(base_path, split_path, dataset='P12', prefix='', upsample=Fal
         ytrain = ytrain[upsampled_train_idx]
     
     # only remove part of params in val, test set
-    train_dataset, train_datadict = load_image(Ptrain, ytrain, base_path, prefix, 0.)
-    val_dataset, val_datadict = load_image(Pval, yval, base_path, prefix, missing_ratio)
-    test_dataset, test_datadict = load_image(Ptest, ytest, base_path, prefix, missing_ratio)
+    train_dataset, train_datadict = load_image(Ptrain, ytrain, base_path, split_idx, prefix, 0.)
+    val_dataset, val_datadict = load_image(Pval, yval, base_path, split_idx, prefix, missing_ratio)
+    test_dataset, test_datadict = load_image(Ptest, ytest, base_path, split_idx, prefix, missing_ratio)
 
     return train_dataset, val_dataset, test_dataset, ytrain, yval, ytest
 

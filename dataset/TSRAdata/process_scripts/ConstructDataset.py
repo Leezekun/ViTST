@@ -8,69 +8,14 @@ from tqdm import tqdm
 from sktime.utils import load_data
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
-from transformers import AutoTokenizer
 import json
 import copy
+import random
 
 from datasets import utils
 from options import Options, setup
-
+from configs import color_detailed_description
 from utils import split_dataset, load_from_tsfile_to_dataframe
-
-
-def standardize(x, mean, std):
-    return (x-mean)/(std+1e-18)
-
-class Normalizer(object):
-    """
-    Normalizes dataframe across ALL contained rows (time steps). Different from per-sample normalization.
-    """
-
-    def __init__(self, norm_type, mean=None, std=None, min_val=None, max_val=None):
-        """
-        Args:
-            norm_type: choose from:
-                "standardization", "minmax": normalizes dataframe across ALL contained rows (time steps)
-                "per_sample_std", "per_sample_minmax": normalizes each sample separately (i.e. across only its own rows)
-            mean, std, min_val, max_val: optional (num_feat,) Series of pre-computed values
-        """
-
-        self.norm_type = norm_type
-        self.mean = mean
-        self.std = std
-        self.min_val = min_val
-        self.max_val = max_val
-
-    def normalize(self, df):
-        """
-        Args:
-            df: input dataframe
-        Returns:
-            df: normalized dataframe
-        """
-        if self.norm_type == "standardization":
-            if self.mean is None:
-                self.mean = df.mean()
-                self.std = df.std()
-            return (df - self.mean) / (self.std + np.finfo(float).eps)
-
-        elif self.norm_type == "minmax":
-            if self.max_val is None:
-                self.max_val = df.max()
-                self.min_val = df.min()
-            return (df - self.min_val) / (self.max_val - self.min_val + np.finfo(float).eps)
-
-        elif self.norm_type == "per_sample_std":
-            grouped = df.groupby(by=df.index)
-            return (df - grouped.transform('mean')) / grouped.transform('std')
-
-        elif self.norm_type == "per_sample_minmax":
-            grouped = df.groupby(by=df.index)
-            min_vals = grouped.transform('min')
-            return (df - min_vals) / (grouped.transform('max') - min_vals + np.finfo(float).eps)
-
-        else:
-            raise (NameError(f'Normalize method "{self.norm_type}" not implemented'))
 
 
 def interpolate_missing(y):
@@ -89,8 +34,7 @@ def subsample(y, limit=256, factor=2):
     if len(y) > limit:
         return y[::factor].reset_index(drop=True)
     return y
-
-
+        
 class BaseData(object):
 
     def set_num_processes(self, n_proc):
@@ -263,22 +207,25 @@ class ClassifiregressionDataset(Dataset):
         return len(self.IDs)
 
 
-def draw_image(id, save_path, feature, ts_scales, min_scale, max_scale,
+def draw_image(id, save_path, feature, ts_scales, 
+            outlier, min_scale, max_scale,
             override, 
             differ,
+            grid_layout,
             image_size,
-            linestyle, linewidth, markersize,
-            ts_marker_mapping, ts_color_mapping, ts_idx_mapping):
+            linestyle, linewidth, marker, markersize,
+            ts_color_mapping, ts_idx_mapping):
 
     feature_length, feature_dim = np.array(feature).shape
 
-    for i in range(100):
-        if i**2 >= feature_dim:
-            grid_height = i
-            grid_width = i
-            break
-
-    grid_layout = [grid_height, grid_width]
+    if grid_layout is None:
+        for i in range(100):
+            if i**2 >= feature_dim:
+                grid_height = i
+                grid_width = i
+                break
+        grid_layout = [grid_height, grid_width]
+    
     if image_size is None:
         cell_height = 64
         cell_width = 64
@@ -294,16 +241,13 @@ def draw_image(id, save_path, feature, ts_scales, min_scale, max_scale,
     plt.rcParams['figure.frameon'] = False
 
     # save img path
-    if min_scale and max_scale:
-        if differ:
-            save_image_path = os.path.join(save_path, f"differ_grid{grid_layout[0]}*{grid_layout[1]}_{img_height}*{img_width}_{min_scale}-{max_scale}_images")
-        else:
-            save_image_path = os.path.join(save_path, f"grid{grid_layout[0]}*{grid_layout[1]}_{img_height}*{img_width}_{min_scale}-{max_scale}_images")
-    else:
-        if differ:
-            save_image_path = os.path.join(save_path, f"differ_grid{grid_layout[0]}*{grid_layout[1]}_{img_height}*{img_width}_images")
-        else:
-            save_image_path = os.path.join(save_path, f"grid{grid_layout[0]}*{grid_layout[1]}_{img_height}*{img_width}_images")
+    save_image_path = f"{linestyle}*{linewidth}_{marker}*{markersize}_{grid_layout[0]}*{grid_layout[1]}_{img_height}*{img_width}_images"
+
+    if differ:
+        save_image_path = "differ_" + save_image_path
+    if outlier:
+        save_image_path = f"{outlier}_" + save_image_path
+    save_image_path = os.path.join(save_path, save_image_path)
 
     if not os.path.exists(save_image_path):
         os.mkdir(save_image_path)
@@ -332,13 +276,12 @@ def draw_image(id, save_path, feature, ts_scales, min_scale, max_scale,
 
         if differ: # using different colors and markers
             ##### draw the plot for each parameter 
-            param_marker = ts_marker_mapping[param]
             param_color = ts_color_mapping[param]
             param_idx = ts_idx_mapping[param]
-            # plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, markersize=markersize, color=param_color, marker="*")
-            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, color=param_color)
+            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, markersize=markersize, marker="*", color=param_color)
+            # plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, color=param_color)
         else:
-            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth)
+            plt.plot(ts_time, ts_value, linestyle=linestyle, linewidth=linewidth, markersize=markersize, marker="*")
 
         plt.xlim(param_scale_x)
         plt.ylim(param_scale_y)
@@ -401,36 +344,30 @@ if __name__ == "__main__":
         break
     print(feature_length, feature_dim)
     ts_params = [str(i) for i in range(feature_dim)]
+    num_params = feature_dim
 
-    # load markers and colors
-    f = open('../processed_data/plt_markers_desc.json', 'r')
-    plt_markers_description = json.load(f)
-    f = open('../processed_data/plt_colors_desc.json', 'r')
-    plt_colors_description = json.load(f)
-
-    plt_markers = list(plt_markers_description.keys())
-    num_markers = len(plt_markers)
-    print(f"{num_markers} markers!")
-
-    plt_colors = list(plt_colors_description.keys())
+    plt_colors = list(color_detailed_description.keys())
     num_colors = len(plt_colors)
     print(f"{num_colors} colors!")
+    # if not enough colors, use (r, g, b) colors
+    if num_colors < num_params:
+        plt_colors = []
+        rs = list(np.linspace(0.0, 1.0, num_params))
+        random.shuffle(rs) # from 0 to 1
+        gs = list(np.linspace(0.0, 1.0, num_params))
+        random.shuffle(gs) # from 0 to 1
+        bs = list(np.linspace(0.0, 1.0, num_params))
+        random.shuffle(bs) # from 0 to 1
+        for idx in range(num_params):
+            color = (rs[idx], gs[idx], bs[idx])
+            plt_colors.append(color)
 
     # construct the mapping from param to marker, color, and idx
-    ts_marker_mapping = {}
     ts_idx_mapping = {}
     ts_color_mapping = {}
-    try:
-        for idx, param in enumerate(ts_params):
-            if idx < num_markers:
-                ts_marker_mapping[param] = plt_markers[idx]
-            else: # if not enough markers, use (num_sides, 0/1/2, angles) markers
-                marker = (int((idx-num_markers)/3)+3, int((idx-num_markers)%3)) # starting from (3,0)
-                ts_marker_mapping[param] = marker
-            ts_color_mapping[param] = plt_colors[idx]
-            ts_idx_mapping[param] = idx
-    except:
-        pass
+    for idx, param in enumerate(ts_params):
+        ts_color_mapping[param] = plt_colors[idx]
+        ts_idx_mapping[param] = idx
 
     # start constructing images and prompts
     save_path = os.path.join(args.data_dir, "processed_data")
@@ -440,29 +377,82 @@ if __name__ == "__main__":
     ImageDict_list = []
     PromptDict_list = []
     arr_outcomes = []
-    tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 
     # first round, find the mean and std for each param across all the data
+    all_ts_values = [[] for _ in range(feature_dim)]
+    stat_ts_values = np.ones(shape=(feature_dim, 12)) # mean, std, min, max
+    for j, (feature, label, id) in tqdm(enumerate(train_val_dataset)):
+        feature_length, feature_dim = np.array(feature).shape
+        for param_idx in range(feature_dim): # ts_desc: (60, 34)
+            ts_value = feature[:, param_idx]
+            ts_value = np.array(ts_value).reshape(-1,1)
+            ts_value = ts_value[ts_value != 0] # remove the missing values
+            all_ts_values[param_idx].extend(list(ts_value))
+
+    # change from list to array
+    for param_idx in range(num_params):
+        all_ts_values[param_idx] = np.array(all_ts_values[param_idx])
+
     min_scale = args.min_scale
     max_scale = args.max_scale
-    all_ts_values = [[] for _ in range(feature_dim)]
-    stat_ts_values = np.ones(shape=(feature_dim, 4)) # mean, std, min, max
-    for i, dataset in enumerate([train_val_dataset, test_dataset]):
-        for j, (feature, label, id) in tqdm(enumerate(dataset)):
-            feature_length, feature_dim = np.array(feature).shape
-            for param_idx in range(feature_dim): # ts_desc: (60, 34)
-                ts_value = feature[:, param_idx]
-                ts_value = np.array(ts_value).reshape(-1,1)
-                ts_value = ts_value[ts_value != 0] # remove the missing values
-                all_ts_values[param_idx].extend(list(ts_value))
-    for param_idx in range(feature_dim):
+    outlier = args.outlier
+    for param_idx in range(num_params): # ts_desc: (60, 34)
         param_ts_value = np.array(all_ts_values[param_idx])
+
         stat_ts_values[param_idx,0] = param_ts_value.mean()
         stat_ts_values[param_idx,1] = param_ts_value.std()
-        # stat_ts_values[param_idx,2] = param_ts_value.min()
-        # stat_ts_values[param_idx,3] = param_ts_value.max()
-        stat_ts_values[param_idx,2] = np.percentile(param_ts_value, min_scale)
-        stat_ts_values[param_idx,3] = np.percentile(param_ts_value, max_scale)
+        stat_ts_values[param_idx,2] = param_ts_value.min()
+        stat_ts_values[param_idx,3] = param_ts_value.max()
+
+        """
+        option 1. remove outliers with boxplot
+        """
+        q1 = np.percentile(param_ts_value, 25)
+        q3 = np.percentile(param_ts_value, 75)
+        med = np.median(param_ts_value)
+        iqr = q3-q1
+        upper_bound = q3+(1.5*iqr)
+        lower_bound = q1-(1.5*iqr)
+        stat_ts_values[param_idx,4] = lower_bound
+        stat_ts_values[param_idx,5] = upper_bound
+        param_ts_value1 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+        outlier_ratio = 1 - (len(param_ts_value1) / len(param_ts_value))
+        print(f"{param_idx}, {outlier_ratio}")
+        
+        """
+        option 2. remove outliers with standard deviation
+        """
+        med = np.median(param_ts_value)
+        std = np.std(param_ts_value)
+        upper_bound = med + (3*std)
+        lower_bound = med - (3*std)
+        stat_ts_values[param_idx,6] = lower_bound
+        stat_ts_values[param_idx,7] = upper_bound
+        param_ts_value2 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+        outlier_ratio = 1 - (len(param_ts_value2) / len(param_ts_value))
+        print(f"{param_idx}, {outlier_ratio}")
+
+        """
+        option 3. remove outliers with modified z-score
+        """
+        med = np.median(param_ts_value)
+        deviation_from_med = param_ts_value - med
+        mad = np.median(np.abs(deviation_from_med))
+        # modified_z_score = (deviation_from_med / mad)*0.6745
+        lower_bound = (-3.5/0.6745)*mad + med
+        upper_bound = (3.5/0.6745)*mad + med
+        stat_ts_values[param_idx,8] = lower_bound
+        stat_ts_values[param_idx,9] = upper_bound
+        param_ts_value3 = param_ts_value[(lower_bound<param_ts_value)&(upper_bound>param_ts_value)]
+        outlier_ratio = 1 - (len(param_ts_value3) / len(param_ts_value))
+        print(f"{param_idx}, {outlier_ratio}")
+
+        """
+        option 4. if given min and max scale
+        """
+        stat_ts_values[param_idx,10] = np.percentile(param_ts_value, min_scale)
+        stat_ts_values[param_idx,11] = np.percentile(param_ts_value, max_scale)
+
 
     for i, dataset in enumerate([train_val_dataset, test_dataset]):
         for j, (feature, label, id) in tqdm(enumerate(dataset)):
@@ -472,18 +462,30 @@ if __name__ == "__main__":
             # concat the test dataset at the end of train_val dataset
             if i == 1: id += len(train_val_indices) 
 
-            ts_scales = stat_ts_values[:,-2:]
             ts_values = feature
-            
+            # normalize the values
+            if not outlier:
+                ts_scales = stat_ts_values[:,2:4] # no removal
+            elif outlier == "iqr":
+                ts_scales = stat_ts_values[:,4:6] # iqr
+            elif outlier == "sd":
+                ts_scales = stat_ts_values[:,6:8] # sd
+            elif outlier == "mzs":
+                ts_scales = stat_ts_values[:,8:10] # mzs
+            elif outlier == "minmax":
+                ts_scales = stat_ts_values[:,10:12] # given min and max scale
+
             # draw the images
-            drawed_params = draw_image(id, save_path, ts_values, ts_scales, min_scale, max_scale,
+            drawed_params = draw_image(id, save_path, ts_values, ts_scales, 
+                                        outlier, min_scale, max_scale,
                                         override=True, 
                                         differ=config["differ"],
-                                        image_size=None,
+                                        grid_layout=config['gridlayout'],
+                                        image_size=config["imagesize"],
                                         linestyle="-", 
                                         linewidth=config["linewidth"], 
+                                        marker="*",
                                         markersize=config["markersize"],
-                                        ts_marker_mapping=ts_marker_mapping, 
                                         ts_color_mapping=ts_color_mapping, 
                                         ts_idx_mapping=ts_idx_mapping)            
             
@@ -495,31 +497,11 @@ if __name__ == "__main__":
             "label_name": str(label[0])
             }
             ImageDict_list.append(ImageDict)
-
-            # construct the prompt
-            # prompt, param_prompts = construct_prompt(feature)
-            # prompt_length = len(tokenizer(prompt)[0])
-            # param_num = len(param_prompts)
-
-            # PromptDict = {
-            # "id": id, 
-            # "prompt": prompt,
-            # "prompt_length": prompt_length,
-            # "param_num": param_num,
-            # "label": label[0],
-            # "label_name": str(label[0]),
-            # "target": str(label[0]),
-            # }
-            # PromptDict_list.append(PromptDict)
-
-            # labels
             arr_outcomes.append(label)
         
     # save the data
     np.save(os.path.join(save_path, 'ImageDict_list.npy'), ImageDict_list)
     print(f"Save data in ImageDict_list.npy")
-    # np.save(os.path.join(save_path, 'PromptDict_list.npy'), PromptDict_list)
-    # print(f"Save data in PromptDict_list.npy")
     np.save(os.path.join(save_path, 'arr_outcomes.npy'), arr_outcomes)
     print(f"Save data in arr_outcomes.npy")
 

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch VisionTextDualEncoder model."""
+import sys
+sys.path.insert(0, '/mnt/raid0/zekun/ViTST/code')
 
 from typing import Optional
 
@@ -29,7 +31,8 @@ from transformers.models.clip.modeling_clip import CLIPOutput, CLIPVisionConfig,
 from transformers.utils import ModelOutput
 
 # my vit/swin
-from models.vit.modeling_vit import ViTConfig, ViTModel
+from models.vit.modeling_vit import ViTConfig, ViTModel 
+# from models.vit_subimage.modeling_vit import ViTConfig, ViTModel # sub-images
 from models.swin.modeling_swin import SwinConfig, SwinModel
 
 from .configuration_vision_text_dual_encoder import VisionTextDualEncoderForClassificationConfig

@@ -1,11 +1,19 @@
+from email.mime import image
+from termios import NL0
 import numpy as np
 import pandas as pd
 import argparse
 import random
+import copy
 from itertools import chain
-from datasets import Dataset, Image
+import os
 
-def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio, feature_removal_level):
+from datasets import load_dataset
+from datasets import load_metric
+from datasets import Dataset, Image
+from nlp import concatenate_datasets
+
+def load_image(Pdict_list, y, base_path, split_idx, dataset_prefix, missing_ratio, feature_removal_level):
     images_path = []
     labels = []
     for idx, d in enumerate(Pdict_list):
@@ -15,9 +23,9 @@ def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio, feature_
         labels.append(label)
 
         if missing_ratio == 0.:
-            image_path = base_path + f'/processed_data/{dataset_prefix}images/{pid}.png'
+            image_path = base_path + f'/processed_data/{dataset_prefix}split{split_idx-1}_images/{pid}.png'
         elif missing_ratio in [0.1, 0.2, 0.3, 0.4, 0.5]:
-            image_path = base_path + f'/processed_data/{feature_removal_level}_{missing_ratio}_{dataset_prefix}images/{pid}.png'
+            image_path = base_path + f'/processed_data/{feature_removal_level}_{missing_ratio}_{dataset_prefix}split{split_idx-1}_images/{pid}.png'
         else:
             raise Exception(f"No dataset for this missing ratio {missing_ratio}")
         images_path.append(image_path)
@@ -27,7 +35,7 @@ def load_image(Pdict_list, y, base_path, dataset_prefix, missing_ratio, feature_
     
     return dataset, datadict
 
-def get_data_split(base_path, split_path, dataset='P12', prefix='', upsample=False, missing_ratio=0., feature_removal_level='random'):
+def get_data_split(base_path, split_path, split_idx, dataset='P12', prefix='', upsample=False, missing_ratio=0., feature_removal_level='random'):
     # load data, the dict list is the same whatever the dataset prefix is
     if dataset == 'P12':
         Pdict_list = np.load(base_path + f'/processed_data/ImageDict_list.npy', allow_pickle=True)
@@ -73,6 +81,7 @@ def get_data_split(base_path, split_path, dataset='P12', prefix='', upsample=Fal
         idx_0 = np.where(ytrain == 0)[0]
         idx_1 = np.where(ytrain == 1)[0]
         n0, n1 = len(idx_0), len(idx_1)
+        print(n0, n1)
         if n0 > n1:
             idx_1 = random.choices(idx_1, k=n0)            
         else:
@@ -86,9 +95,9 @@ def get_data_split(base_path, split_path, dataset='P12', prefix='', upsample=Fal
 
     # the dataset prefix works when loading the images
     # only remove part of variables in val and test set
-    train_dataset, train_datadict = load_image(Ptrain, ytrain, base_path, prefix, 0., feature_removal_level)
-    val_dataset, val_datadict = load_image(Pval, yval, base_path, prefix, missing_ratio, feature_removal_level)
-    test_dataset, test_datadict = load_image(Ptest, ytest, base_path, prefix, missing_ratio, feature_removal_level)
+    train_dataset, train_datadict = load_image(Ptrain, ytrain, base_path, split_idx, prefix, 0., feature_removal_level)
+    val_dataset, val_datadict = load_image(Pval, yval, base_path, split_idx, prefix, missing_ratio, feature_removal_level)
+    test_dataset, test_datadict = load_image(Ptest, ytest, base_path, split_idx, prefix, missing_ratio, feature_removal_level)
 
     return train_dataset, val_dataset, test_dataset, ytrain, yval, ytest
 

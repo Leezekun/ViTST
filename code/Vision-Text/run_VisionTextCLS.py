@@ -1,10 +1,14 @@
-import os
 import sys
+sys.path.insert(0, '/mnt/raid0/zekun/ViTST/code')
+import os
+
+import imp
 import argparse
 from random import seed
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import collections.abc
 
 import torch
 from transformers import *
@@ -41,54 +45,6 @@ def one_hot(y_):
     return np.eye(n_values)[np.array(y_, dtype=np.int32)]
 
 
-class Cutout(object):
-    """Randomly mask out one or more patches from an image.
-    Args:
-        n_holes (int): Number of patches to cut out of each image.
-        length (int): The length (in pixels) of each square patch.
-    """
-    def __init__(self, n_holes, length, fixed_vertical=False):
-        self.n_holes = n_holes
-        self.length = length
-        self.fixed_vertical = fixed_vertical
-    
-    def __call__(self, img):
-        """
-        Args:
-            img (Tensor): Tensor image of size (C, H, W).
-        Returns:
-            Tensor: Image with n_holes of dimension length x length cut out of it.
-        """
-        h = img.size(1)
-        w = img.size(2)
-
-        mask = np.ones((h, w), np.float32)
-
-        for n in range(self.n_holes):
-            if self.fixed_vertical:
-                x = np.random.randint(w)
-
-                y1 = 0
-                y2 = h - 1
-                x1 = np.clip(x - self.length // 2, 0, w)
-                x2 = np.clip(x + self.length // 2, 0, w)
-            else:
-                y = np.random.randint(h)
-                x = np.random.randint(w)
-
-                y1 = np.clip(y - self.length // 2, 0, h)
-                y2 = np.clip(y + self.length // 2, 0, h)
-                x1 = np.clip(x - self.length // 2, 0, w)
-                x2 = np.clip(x + self.length // 2, 0, w)
-
-            mask[y1: y2, x1: x2] = 0.
-
-        mask = torch.from_numpy(mask)
-        mask = mask.expand_as(img)
-        img = img * mask
-
-        return img
-
 def fine_tune_hf(
     image_model_path,
     text_model_path,
@@ -100,8 +56,6 @@ def fine_tune_hf(
     test_dataset,
     image_size,
     grid_layout,
-    cutout_num,
-    cutout_size,
     num_classes,
     max_length,
     epochs,
@@ -177,7 +131,6 @@ def fine_tune_hf(
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(image_model_path)
     tokenizer = AutoTokenizer.from_pretrained(text_model_path)
-    processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
 
     # define evaluation metric
     def compute_metrics_binary(eval_pred):
@@ -236,7 +189,7 @@ def fine_tune_hf(
             [   
                 # Resize(feature_extractor.size),
                 ToTensor(),
-                Cutout(n_holes=cutout_num,length=cutout_size),
+                # Cutout(n_holes=cutout_num,length=cutout_size),
             ]
         )
     val_transforms = Compose(
@@ -291,7 +244,7 @@ def fine_tune_hf(
         best_metric = "rmse"
     elif num_classes == 2:
         compute_metrics = compute_metrics_binary
-        best_metric = "auprc"
+        best_metric = "auroc"
     elif num_classes > 2:
         compute_metrics = compute_metrics_multilabel
         best_metric = "accuracy"
@@ -325,8 +278,8 @@ def fine_tune_hf(
     model,
     training_args,
     train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-    # eval_dataset=test_dataset,
+    # eval_dataset=val_dataset,
+    eval_dataset=test_dataset,
     # tokenizer=feature_extractor,
     compute_metrics=compute_metrics,
     data_collator=collate_fn,
@@ -410,8 +363,6 @@ if __name__ == "__main__":
     parser.add_argument('--upsample', default=False)
 
     # argument for the images
-    parser.add_argument('--cutout_num', type=int, default=0)
-    parser.add_argument('--cutout_size', type=int, default=0)
     parser.add_argument('--grid_layout', default=None)
     parser.add_argument('--image_size', default=None)
     parser.add_argument('--mask_patch_size', type=int, default=None)
@@ -434,8 +385,6 @@ if __name__ == "__main__":
     upsample = args.upsample
     epochs = args.epochs
     image_size = grid_layout = None
-    cutout_num = args.cutout_num
-    cutout_size = args.cutout_size
     mask_patch_size = args.mask_patch_size
     mask_ratio = args.mask_ratio
     mask_method = args.mask_method
@@ -444,17 +393,17 @@ if __name__ == "__main__":
     if dataset == 'P12':
         base_path = '../../dataset/P12data'
         num_classes = 2
-        image_size = (384,384)
-        grid_layout = (6,6)
         upsample = True
         epochs = 4
+        image_size = (384,384)
+        grid_layout = (6,6)
     elif dataset == 'P19':
         base_path = '../../dataset/P19data'
         num_classes = 2
-        image_size = (256,576)
-        grid_layout = (4,9)
         upsample = True
         epochs = 2
+        image_size = (384,384)
+        grid_layout = (6,6)
     elif dataset == 'PAM':
         base_path = '../../dataset/PAMdata'
         num_classes = 8
@@ -570,6 +519,7 @@ if __name__ == "__main__":
         mae_arr = np.zeros((n_splits, n_runs))
 
         for k in range(n_splits):
+        # for k in range(4,5):
             split_idx = k + 1
             print('Split id: %d' % split_idx)
             if dataset == 'P12':
@@ -602,14 +552,14 @@ if __name__ == "__main__":
             # the path to save models
             if args.output_dir is None:
                 if args.finetune_mim:
-                    output_dir = f"../../ckpt/VisionTextCLS/{dataset_prefix}{dataset}_{image_model}{freeze_vision_model}-{text_model}{freeze_text_model}_cutout_{cutout_num}_{cutout_size}_mim_{mask_patch_size}_{mask_ratio}_{mask_method}_ep{epochs}_lr{args.learning_rate}/split{split_idx}"
+                    output_dir = f"../../ckpt/VisionTextCLS/{dataset_prefix}{dataset}_{image_model}{freeze_vision_model}-{text_model}{freeze_text_model}_mim_{mask_patch_size}_{mask_ratio}_{mask_method}/split{split_idx}"
                 else:
-                    output_dir = f"../../ckpt/VisionTextCLS/{dataset_prefix}{dataset}_{image_model}{freeze_vision_model}-{text_model}{freeze_text_model}_cutout_{cutout_num}_{cutout_size}_ep{epochs}_lr{args.learning_rate}/split{split_idx}"
+                    output_dir = f"../../ckpt/VisionTextCLS/{dataset_prefix}{dataset}_{image_model}{freeze_vision_model}-{text_model}{freeze_text_model}/split{split_idx}"
             else:
                 output_dir = f"../../ckpt/VisionTextCLS/{args.output_dir}/split{split_idx}"
 
             # prepare the data:
-            Ptrain, Pval, Ptest, ytrain, yval, ytest = get_data_split(base_path, split_path, dataset=dataset, prefix=dataset_prefix, upsample=upsample, missing_ratio=missing_ratio)
+            Ptrain, Pval, Ptest, ytrain, yval, ytest = get_data_split(base_path, split_path, split_idx, dataset=dataset, prefix=dataset_prefix, upsample=upsample, missing_ratio=missing_ratio)
             print(len(Ptrain), len(Pval), len(Ptest), len(ytrain), len(yval), len(ytest))
             
             # if pval is none: use test dataset instead
@@ -631,8 +581,6 @@ if __name__ == "__main__":
                 test_dataset=Ptest,
                 image_size=image_size,
                 grid_layout=grid_layout,
-                cutout_num=cutout_num,
-                cutout_size=cutout_size,
                 num_classes=num_classes,
                 max_length=max_length,
                 epochs=epochs,

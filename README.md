@@ -12,6 +12,28 @@ With a few lines of code to transform the time series into line graph images, an
     <img src="pics/illustration.png" width="720" align="center">
 </p>
 
+### Results
+With such a simple idea, our approach significantly outperforms highly specialized SoTA algorithms:
+| Methods    | P19         |           | P12         |           | PAM         |            |         |         |
+|:----------:|:-----------:|:---------:|:-----------:|:---------:|:-----------:|:----------:|:-------:|:-------:|
+|            | AUROC       | AUPRC     | AUROC       | AUPRC     | Accuracy    | Precision  | Recall  | F1 score|
+| Transformer| 80.7±3.8    | 42.7±7.7  | 83.3±0.7    | 47.9±3.6  | 83.5±1.5    | 84.8±1.5   | 86.0±1.2| 85.0±1.3|
+| Trans-mean | 83.7±1.8    | 45.8±3.2  | 82.6±2.0    | 46.3±4.0  | 83.7±2.3    | 84.9±2.6   | 86.4±2.1| 85.1±2.4|
+| GRU-D      | 83.9±1.7    | 46.9±2.1  | 81.9±2.1    | 46.1±4.7  | 83.3±1.6    | 84.6±1.2   | 85.2±1.6| 84.8±1.2|
+| SeFT       | 81.2±2.3    | 41.9±3.1  | 73.9±2.5    | 31.1±4.1  | 67.1±2.2    | 70.0±2.4   | 68.2±1.5| 68.5±1.8|
+| mTAND      | 84.4±1.3    | 50.6±2.0  | 84.2±0.8    | 48.2±3.4  | 74.6±4.3    | 74.3±4.0   | 79.5±2.8| 76.8±3.4|
+| IP-Net     | 84.6±1.3    | 38.1±3.7  | 82.6±1.4    | 47.6±3.1  | 74.3±3.8    | 75.6±2.1   | 77.9±2.2| 76.6±2.8|
+| DGM^2-O    | 86.7±3.4    | 44.7±11.7 | 84.4±1.6    | 47.3±3.6  | 82.4±2.3    | 85.2±1.2   | 83.9±2.3| 84.3±1.8|
+| MTGNN      | 81.9±6.2    | 39.9±8.9  | 74.4±6.7    | 35.5±6.0  | 83.4±1.9    | 85.2±1.7   | 86.1±1.9| 85.9±2.4|
+| Raindrop   | 87.0±2.3    | 51.8±5.5  | 82.8±1.7    | 44.0±3.0  | 88.5±1.5    | 89.9±1.5   | 89.9±0.6| 89.8±1.0|
+| **ViTST**  | **89.2±2.0**|**53.1±3.4**|**85.1±0.8**|**51.1±4.1**|**95.8±1.3**|**96.2±1.3**|**96.1±1.1**| **96.5±1.2**|
+
+In the rigorous leave-sensors-out setting where a portion of variables is omitted during testing, our method exhibits strong robustness against varying degrees of missing observations, achieving an impressive improvement over leading specialized baselines:
+![Performance in leave-sensors-out setting. Above is the leave-**fixed**-sensors-out where a fixed set of variables are removed across all evaluated methods. Below is the leave-**random**-sensors-out where the variables are randomly removed.](./pics/leave-sensors-out.png)
+
+
+*Figure: Performance in leave-**fixed**-sensors-out and leave-**random**-sensors-out settings on PAM dataset. The x-axis is the "missing ratio" which denotes the ratio of masked variables.*
+
 
 ## Getting Started
 
@@ -37,17 +59,25 @@ The processed datasets can be obtained at:
 **(3)** PAM (PAMAP2 Physical Activity Monitoring) https://doi.org/10.6084/m9.figshare.19514347.v1
 
 
-Follow these two steps to create the dataset:
+Follow these two steps to create the images for each dataset:
 1. Get the processed data, unzip them, and put the files in ```dataset``` folder.
-2. Run the following commands in turn to create the images: ```cd dataset/P12data/```, ```python ParamDescription.py```, ```python ConstructImage.py```
+2. Run the following commands in turn to create the images: 
+   1. ```cd dataset/P12data/```, ```python ConstructImage.py```
+   2. ```cd dataset/P19data/```, ```python ConstructImage.py```
+   2. ```cd dataset/PAMdata/```, ```python ConstructImage.py```
+
+**We have also provided the created images at https://drive.google.com/drive/folders/1tBkEcU9vqjbLvRqfevkbQOw4-7XcURXE?usp=drive_link**
+Download the data, unzip the data, and put them in the corresponding directory.
+For example, put all the directories obtained by unzipping the `P12_images.zip` under the `./datasets/P12data/processed_data/` directory.
 
 ### Regular Time Series Datasets
 You can download the datasets at http://www.timeseriesclassification.com/Downloads/Archives/Multivariate2018_ts.zip. 
 
 Create a folder ```Classification``` in the ```TSRAdara``` folder. Run ```PlotMarkers.py``` and ```ConstructDataset.py``` to create the images.
 
-
 ### Training
+Before started, remember to insert your project directory into the system path by replacing the PROJECT_PATH in `sys.path.insert(0, 'PROJECT_PATH/code')` with your own project path.
+
 For the dataset containing static features, such as P19 and P12, go to the ```code/Vision-Text/``` folder and run the script ```vtcls_script.sh``` to start training:
 ```
 cd code/Vision-Text/
