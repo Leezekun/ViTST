@@ -164,3 +164,14 @@ https://github.com/mims-harvard/Raindrop
 
 https://github.com/gzerveas/mvts_transformer
  -->
+
+### Citations
+if you found this repo useful, please consider citing our paper:
+```
+@article{li2023time,
+  title={Time Series as Images: Vision Transformer for Irregularly Sampled Time Series},
+  author={Li, Zekun and Li, Shiyang and Yan, Xifeng},
+  journal={arXiv preprint arXiv:2303.12799},
+  year={2023}
+}
+```
