@@ -67,6 +67,7 @@ Follow these two steps to create the images for each dataset:
    2. ```cd dataset/PAMdata/```, ```python ConstructImage.py```
 
 **We have also provided the created images at https://drive.google.com/drive/folders/1tBkEcU9vqjbLvRqfevkbQOw4-7XcURXE?usp=drive_link**
+
 Download the data, unzip the data, and put them in the corresponding directory.
 For example, put all the directories obtained by unzipping the `P12_images.zip` under the `./datasets/P12data/processed_data/` directory.
 
