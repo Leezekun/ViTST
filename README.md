@@ -91,12 +91,12 @@ cd code/Vision/
 sh imgcls_script.sh
 ```
 
-### Self-supervised learning
+<!-- ### Self-supervised learning
 If you want to self-supervised learning pretrain the model, go to the ```code/Vision/``` folder and run the script ```imgmim_script.sh``` to start training: 
 ```
 cd code/Vision/
 sh imgmim_script.sh
-```
+``` -->
 
 ### Run baseline methods
 We use the code provided by [Raindrop](https://github.com/mims-harvard/Raindrop). The code for the following baseline methods are placed in ```dataset/raindrop``` folder: Transformer, Trans-mean, GRU-D, SeFT and mTAND. See details of these baselines in our paper. 
