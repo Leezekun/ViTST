@@ -72,7 +72,7 @@ Download the data, unzip the data, and put them in the corresponding directory.
 For example, put all the directories obtained by unzipping the `P12_images.zip` under the `./datasets/P12data/processed_data/` directory.
 
 ### Regular Time Series Datasets
-You can download the datasets at http://www.timeseriesclassification.com/Downloads/Archives/Multivariate2018_ts.zip. 
+You can download the datasets at http://www.timeseriesclassification.com/aeon-toolkit/Archives/Multivariate2018_ts.zip. 
 
 Create a folder ```Classification``` in the ```TSRAdara``` folder. Run ```PlotMarkers.py``` and ```ConstructDataset.py``` to create the images.
 
