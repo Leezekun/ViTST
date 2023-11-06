@@ -74,7 +74,7 @@ For example, put all the directories obtained by unzipping the `P12_images.zip` 
 ### Regular Time Series Datasets
 You can download the datasets at http://www.timeseriesclassification.com/aeon-toolkit/Archives/Multivariate2018_ts.zip. 
 
-Create a folder ```Classification``` in the ```TSRAdara``` folder. Run ```PlotMarkers.py``` and ```ConstructDataset.py``` to create the images.
+Create a folder ```Classification``` in the ```TSRAdara``` folder. Run ```ConstructDataset.py``` to create the images.
 
 ### Training
 Before started, remember to insert your project directory into the system path by replacing the PROJECT_PATH in `sys.path.insert(0, 'PROJECT_PATH/code')` with your own project path.
